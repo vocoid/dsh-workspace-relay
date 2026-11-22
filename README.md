@@ -49,7 +49,7 @@ With no arguments, the picker lists other sessions grouped by workspace and offe
 The plugin row has two controls:
 
 - **Show spawned sessions in workspace lists** — off by default. When off, sessions created by `workspace_spawn` or `/forward --new` are subagent-origin and stay out of the sidebar; the relay tools can still reach them by id. Turning it on affects future spawns — new sessions become ordinary sessions attached to their workspace. Origin is immutable, so existing hidden sessions stay hidden.
-- **Default wait time** — how long relay tools wait for a reply, in seconds. Default 120, range 1–600. An agent can override it per call with `timeout_ms`, or skip waiting with `wait: false`.
+- **Default wait time** — how long relay tools wait for a reply, in seconds. Default 120, range 0–600; **0 waits indefinitely**. An agent can override it per call with `timeout_ms` (`0` also means indefinite), or skip waiting with `wait: false`.
 
 ## Install
 

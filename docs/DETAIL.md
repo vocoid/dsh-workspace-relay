@@ -31,12 +31,12 @@ With no arguments, a picker lists other sessions grouped by workspace and one "n
 The plugin row has a settings page with two controls:
 
 - **Show spawned sessions in workspace lists** — off by default. While it is off, sessions created by `workspace_spawn` or `/forward --new` are subagent-origin: they do not appear anywhere in the sidebar. Turning it on makes newly created sessions ordinary sessions attached to their workspace. The switch affects future spawns; an existing hidden session keeps its origin. The tools remain able to reach hidden sessions by id.
-- **Default wait time** — seconds to wait for a reply (default 120, range 1–600). Agents can override it with `timeout_ms`; `wait: false` delivers without waiting.
+- **Default wait time** — seconds to wait for a reply (default 120, range 0–600; 0 waits indefinitely). Agents can override it with `timeout_ms`; `wait: false` delivers without waiting.
 
 ## Behavior and limits
 
 - Waiting is a tool call, not a background subscription: the reply is the target turn that claims the sent message. A busy target replies after its current turn.
-- Default wait is 120 seconds per target (configurable in settings); `timeout_ms` overrides it per call. A timeout returns the session id so the work can be followed later.
+- Default wait is 120 seconds per target (configurable in settings); `timeout_ms` overrides it per call, and `timeout_ms: 0` waits indefinitely until the target turn ends. A finite timeout returns the session id so the work can be followed later.
 - Sending to the caller's own session is refused.
 - A spawned session is kept live by the plugin until the plugin unloads or the profile restarts; its log is persisted, and the plugin can resume it. A hidden session has subagent origin, so the sidebar does not offer to open it; use the session id with `workspace_send` instead.
 - `workspace_spawn` needs the directory to exist or be creatable. The workspace registration is created on demand.

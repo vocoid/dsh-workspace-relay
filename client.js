@@ -20,9 +20,9 @@ window.__ModuleLoader__.load({
       saveFailed: 'Could not save the setting.',
       conflict: 'The configuration changed. Reopen this page and try again.',
       waitTitle: 'Default wait time',
-      waitHint: 'Seconds to wait for a reply. Agents can override it per call with timeout_ms.',
+      waitHint: 'Seconds to wait for a reply. 0 waits indefinitely. Agents can override it per call with timeout_ms.',
       save: 'Save',
-      invalidWait: 'Enter 1–600 seconds.',
+      invalidWait: 'Enter 0–600 seconds.',
       searchPlaceholder: 'Search sessions or workspaces…',
       empty: 'No other sessions or workspaces.',
       noResults: 'No matching sessions or workspaces.',
@@ -45,9 +45,9 @@ window.__ModuleLoader__.load({
       saveFailed: '无法保存设置。',
       conflict: '配置已变化，请重新打开此页面后再试。',
       waitTitle: '默认等待时间',
-      waitHint: '等待回复的秒数。agent 可以在每次调用时用 timeout_ms 覆盖。',
+      waitHint: '等待回复的秒数。0 表示一直等待。agent 可以在每次调用时用 timeout_ms 覆盖。',
       save: '保存',
-      invalidWait: '请输入 1–600 秒。',
+      invalidWait: '请输入 0–600 秒。',
       searchPlaceholder: '搜索会话或工作区…',
       empty: '没有其他会话或工作区。',
       noResults: '没有匹配的会话或工作区。',
@@ -227,7 +227,7 @@ window.__ModuleLoader__.load({
       async function saveWait() {
         if (disabled) return;
         const seconds = Number(waitSeconds);
-        if (!Number.isFinite(seconds) || seconds < 1 || seconds > 600) {
+        if (!Number.isFinite(seconds) || seconds < 0 || seconds > 600) {
           setError(t('invalidWait'));
           return;
         }
@@ -303,7 +303,7 @@ window.__ModuleLoader__.load({
             h('input', {
               key: 'seconds',
               type: 'number',
-              min: 1,
+              min: 0,
               max: 600,
               step: 1,
               value: waitSeconds ?? '',

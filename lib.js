@@ -183,10 +183,16 @@ export function formatAsk(workspaceTitle, id, outcome, maxReplyChars) {
   return `[${workspaceTitle} · ${id}] ${reply}`;
 }
 
-/** Resolve a tool's wait deadline: false disables waiting; per-call timeout wins over the default. */
+/**
+ * Resolve a tool's wait deadline:
+ * - `wait: false` -> 0 (deliver without waiting)
+ * - explicit `timeout_ms: 0` or a 0 default -> null (wait indefinitely)
+ * - otherwise a clamped positive millisecond count.
+ */
 export function resolveWaitMs(wait, timeoutMs, fallback, min, max) {
   if (wait === false) return 0;
   const requested = Number(timeoutMs === undefined || timeoutMs === null ? fallback : timeoutMs);
+  if (requested === 0) return null;
   if (!Number.isFinite(requested)) return min;
   return Math.min(max, Math.max(min, Math.trunc(requested)));
 }

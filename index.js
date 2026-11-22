@@ -29,14 +29,13 @@ export const inject = ['tools', 'agents', 'workspaceRegistry', 'sessionQuery', '
 const DEFAULT_WAIT_MS = 120_000;
 const MAX_WAIT_MS = 600_000;
 const MAX_REPLY_CHARS = 8_000;
-const TOOL_TIMEOUT_MS = MAX_WAIT_MS + 30_000;
 const RELAY_TITLE = 'Workspace relay';
 
 const schema = z.object({
   showSpawnedSessions: z.boolean().default(false)
     .description('Show sessions created by workspace_spawn or /forward in their workspace list.'),
   defaultWaitMs: z.number().default(DEFAULT_WAIT_MS)
-    .description('Default reply wait in milliseconds for workspace tools. Agents can override with timeout_ms.'),
+    .description('Default reply wait in milliseconds. 0 waits indefinitely; agents can override with timeout_ms.'),
 });
 export const Config = typeof schema.volatile === 'function' ? schema.volatile() : schema;
 
@@ -160,11 +159,11 @@ export function apply(ctx, source) {
       },
       timeout_ms: {
         type: 'integer',
-        description: `Per-target wait deadline, 1000-${MAX_WAIT_MS} ms. Default ${DEFAULT_WAIT_MS}.`,
+        description: `Per-target wait deadline in ms. 0 waits indefinitely; otherwise 1000-${MAX_WAIT_MS}. `
+          + `Default ${DEFAULT_WAIT_MS} or the plugin setting.`,
       },
     },
     output: TEXT_OUTPUT,
-    timeoutMs: TOOL_TIMEOUT_MS,
     execute: async (args, exec) => {
       if (!Array.isArray(args.session_ids) || args.session_ids.length === 0) {
         throw new Error('session_ids must contain at least one session id');
@@ -225,11 +224,11 @@ export function apply(ctx, source) {
       },
       timeout_ms: {
         type: 'integer',
-        description: `Wait deadline, 1000-${MAX_WAIT_MS} ms. Default ${DEFAULT_WAIT_MS}.`,
+        description: `Wait deadline in ms. 0 waits indefinitely; otherwise 1000-${MAX_WAIT_MS}. `
+          + `Default ${DEFAULT_WAIT_MS} or the plugin setting.`,
       },
     },
     output: TEXT_OUTPUT,
-    timeoutMs: TOOL_TIMEOUT_MS,
     execute: async (args, exec) => {
       const question = typeof args.question === 'string' ? args.question.trim() : '';
       if (question === '') throw new Error('question must not be empty');
@@ -299,11 +298,11 @@ export function apply(ctx, source) {
       },
       timeout_ms: {
         type: 'integer',
-        description: `Wait deadline, 1000-${MAX_WAIT_MS} ms. Default ${DEFAULT_WAIT_MS}.`,
+        description: `Wait deadline in ms. 0 waits indefinitely; otherwise 1000-${MAX_WAIT_MS}. `
+          + `Default ${DEFAULT_WAIT_MS} or the plugin setting.`,
       },
     },
     output: TEXT_OUTPUT,
-    timeoutMs: TOOL_TIMEOUT_MS,
     execute: async (args, exec) => {
       const callerCwd = exec.agent?.session.header.cwd ?? process.cwd();
       const requested = isAbsolute(args.workspace)
@@ -588,7 +587,7 @@ async function deliver(ctx, agent, text, waitMs, signal) {
     content: [{ type: 'text', text }],
     source: { kind: 'user' },
   });
-  if (waitMs <= 0) {
+  if (waitMs === 0) {
     agent.followup(message);
     return { delivered: true, timedOut: false };
   }
@@ -621,7 +620,9 @@ async function deliver(ctx, agent, text, waitMs, signal) {
       }
     });
 
-    const end = await withTimeout(reply, waitMs, signal);
+    const end = waitMs === null
+      ? await withAbort(reply, signal)
+      : await withTimeout(reply, waitMs, signal);
     if (end === null) return { delivered: true, timedOut: true };
     if (turnStartSeq === undefined) turnStartSeq = findTurnStart(session, targetTurn);
     const events = turnStartSeq === undefined
@@ -661,6 +662,25 @@ function withTimeout(promise, ms, signal) {
     };
     const onAbort = () => finish(rejectPromise, signal?.reason ?? new Error('aborted'));
     const timer = setTimeout(() => finish(resolvePromise, null), Math.max(1, ms));
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+    promise.then(value => finish(resolvePromise, value), error => finish(rejectPromise, error));
+  });
+}
+
+function withAbort(promise, signal) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    let settled = false;
+    const finish = (settle, value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener?.('abort', onAbort);
+      settle(value);
+    };
+    const onAbort = () => finish(rejectPromise, signal?.reason ?? new Error('aborted'));
     if (signal?.aborted) {
       onAbort();
       return;
