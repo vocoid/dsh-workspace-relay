@@ -1,0 +1,3 @@
+- insert:
+    - id: workspace-relay
+      name: '@local/dsh-workspace-relay'

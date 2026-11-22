@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Workspace Relay",
+    "description": "List workspaces and sessions, send messages to sessions in other workspaces, and create worker or overseer sessions there.",
+    "detail": "docs/DETAIL.md"
+  }
+}
