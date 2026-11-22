@@ -1,4 +1,4 @@
-/** Pure formatting and transcript helpers for the workspace-relay bundle. */
+/** Pure formatting and transcript helpers for the workspace-relay plugin. */
 
 export function truncate(text, max) {
   if (typeof text !== 'string') return '';
