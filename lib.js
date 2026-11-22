@@ -168,6 +168,21 @@ export function formatDelivery(id, outcome, maxReplyChars) {
   return `[${id}] ${reply}`;
 }
 
+/** Whether a session title marks a workspace-ask relay session. */
+export function isRelayTitle(title) {
+  return typeof title === 'string' && title.startsWith('Workspace relay: ');
+}
+
+export function formatAsk(workspaceTitle, id, outcome, maxReplyChars) {
+  if (outcome.timedOut) {
+    return `[${workspaceTitle} · ${id}] delivered; no reply before the deadline. The relay may still be working.`;
+  }
+  const reply = outcome.reply === null || outcome.reply === ''
+    ? '(no text reply)'
+    : truncate(outcome.reply, maxReplyChars);
+  return `[${workspaceTitle} · ${id}] ${reply}`;
+}
+
 export function formatSpawn(result, maxReplyChars) {
   const lines = [`Created ${result.sessionId} in ${result.cwd}`];
   if (result.warning) lines.push(result.warning);

@@ -1,7 +1,7 @@
 {
   "name": "@local/dsh-workspace-relay",
-  "version": "0.3.0",
-  "description": "Workspace relay: list workspaces and sessions, message chosen sessions, spawn worker or overseer sessions, and forward messages with /forward.",
+  "version": "0.4.0",
+  "description": "Workspace relay: ask another workspace automatically, message chosen sessions, spawn worker or overseer sessions, and forward messages with /forward.",
   "private": true,
   "type": "module",
   "exports": {

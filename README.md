@@ -7,6 +7,7 @@ It also adds a `/forward` command: pick one or more existing sessions, or create
 ## Features
 
 - **See other workspaces** — list registered workspaces and the sessions inside each one.
+- **Ask another workspace automatically** — ask a question without picking a session; the plugin reuses (or creates) a relay session in that workspace and returns its answer.
 - **Message sessions across workspaces** — send to one or more session ids; by default wait for each target's turn and return its reply.
 - **Spawn a worker or overseer** — create a session whose working directory is the target workspace, give it a task, and optionally wait for the result.
 - **Forward with a picker** — bare `/forward` opens a searchable list grouped by workspace, ordered by most recent activity.
@@ -18,8 +19,19 @@ It also adds a `/forward` command: pick one or more existing sessions, or create
 | --- | --- |
 | `workspace_list` | List workspaces, paths, and session counts. |
 | `workspace_sessions` | List sessions in a workspace with ids, titles, timestamps, and live/archive state. |
+| `workspace_ask` | Ask a workspace a question through an automatic relay session; pass `session_id` to use an existing session instead. |
 | `workspace_send` | Send one message to one or more session ids, optionally waiting for replies. |
 | `workspace_spawn` | Create a session in a target workspace and send it a task. |
+
+## Automatic relay
+
+`workspace_ask` takes a workspace and a question. On first use it creates a hidden relay session whose working directory is that workspace; later asks reuse the same relay, so it keeps context across questions. The relay can read files and run tools in that workspace. No session id or manual selection is needed.
+
+```json
+{ "workspace": "RobuxBot", "question": "What does the bot do, and where is its entry point?" }
+```
+
+Pass `session_id` when you specifically want to ask an existing session instead of the relay.
 
 ## `/forward`
 

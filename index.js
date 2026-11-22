@@ -12,10 +12,12 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { installModelSelection } from '@deepseek-ai/dsh-agent';
 import {
   assistantTextIn,
+  formatAsk,
   formatDelivery,
   formatSessions,
   formatSpawn,
   formatWorkspaces,
+  isRelayTitle,
   lastUserText,
   parseForward,
 } from './lib.js';
@@ -33,6 +35,7 @@ const DEFAULT_WAIT_MS = 120_000;
 const MAX_WAIT_MS = 600_000;
 const MAX_REPLY_CHARS = 8_000;
 const TOOL_TIMEOUT_MS = MAX_WAIT_MS + 30_000;
+const RELAY_TITLE = 'Workspace relay';
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' },
@@ -44,11 +47,13 @@ export function apply(ctx, source) {
   const readConfig = () => (live ? source.get() : (source ?? {}));
 
   const owned = new Map();
+  const relays = new Map();
   ctx.effect(() => () => {
     for (const handle of owned.values()) {
       try { handle.dispose(); } catch { /* dispose is best-effort during unload */ }
     }
     owned.clear();
+    relays.clear();
   }, 'workspace-relay.owned-agents');
 
   ctx.tools.register(defineTool({
@@ -187,6 +192,71 @@ export function apply(ctx, source) {
   }));
 
   ctx.tools.register(defineTool({
+    name: 'workspace_ask',
+    description: 'Ask a question in another workspace without choosing a session. '
+      + 'The first ask creates a dedicated hidden relay session in that workspace and later asks reuse it. '
+      + 'The relay runs with that workspace as its working directory, so it can inspect and use tools there. '
+      + 'Pass session_id to ask an existing session instead. By default this waits for the reply.',
+    parameters: {
+      workspace: {
+        type: 'string',
+        required: true,
+        description: 'Workspace id, exact title, or registered directory path.',
+      },
+      question: {
+        type: 'string',
+        required: true,
+        description: 'Question or task for the workspace relay.',
+      },
+      session_id: {
+        type: 'string',
+        description: 'Optional existing session id in that workspace. Omit to use the automatic relay.',
+      },
+      wait: {
+        type: 'boolean',
+        description: 'Wait for the reply. Default true.',
+      },
+      timeout_ms: {
+        type: 'integer',
+        description: `Wait deadline, 1000-${MAX_WAIT_MS} ms. Default ${DEFAULT_WAIT_MS}.`,
+      },
+    },
+    output: TEXT_OUTPUT,
+    timeoutMs: TOOL_TIMEOUT_MS,
+    execute: async (args, exec) => {
+      const question = typeof args.question === 'string' ? args.question.trim() : '';
+      if (question === '') throw new Error('question must not be empty');
+      const callerCwd = exec.agent?.session.header.cwd ?? process.cwd();
+      const workspace = await resolveWorkspace(ctx, args.workspace, callerCwd);
+      if (workspace === undefined) {
+        throw new Error(`No workspace matches "${args.workspace}". Use workspace_list, or pass an absolute directory.`);
+      }
+      const waitMs = args.wait === false
+        ? 0
+        : clamp(args.timeout_ms ?? DEFAULT_WAIT_MS, 1_000, MAX_WAIT_MS);
+
+      let target;
+      if (typeof args.session_id === 'string' && args.session_id !== '') {
+        if (args.session_id === exec.agent?.session.id) {
+          throw new Error('refusing to ask the calling session');
+        }
+        target = await getOrResumeAgent(ctx, args.session_id, owned);
+        if (target.session.header.cwd !== workspace.path) {
+          throw new Error(`session "${args.session_id}" is not in workspace "${workspace.title}"`);
+        }
+      } else {
+        target = await getRelayAgent(ctx, readConfig, workspace, owned, relays);
+      }
+      if (target.session.id === exec.agent?.session.id) {
+        throw new Error('refusing to ask the calling session');
+      }
+
+      const delivery = await deliver(ctx, target, question, waitMs, exec.signal);
+      return formatAsk(workspace.title, target.session.id, delivery, MAX_REPLY_CHARS);
+    },
+  }));
+
+  ctx.tools.register(defineTool({
     name: 'workspace_spawn',
     description: 'Create a new session in a target workspace and give it a task. '
       + 'The new session runs with that workspace as its working directory and its own tools, so it '
@@ -296,6 +366,54 @@ async function createSessionIn(ctx, readConfig, requested, options, owned) {
     }
   }
   return { handle, cwd, warning };
+}
+
+async function getRelayAgent(ctx, readConfig, workspace, owned, relays) {
+  const remembered = relays.get(workspace.id);
+  if (remembered !== undefined) {
+    try {
+      const agent = await getOrResumeAgent(ctx, remembered, owned);
+      if (agent.session.header.cwd === workspace.path) return agent;
+    } catch { /* stale relay record; discover or create another below */ }
+  }
+
+  const found = await findRelaySession(ctx, workspace);
+  if (found !== undefined) {
+    try {
+      const agent = await getOrResumeAgent(ctx, found, owned);
+      if (agent.session.header.cwd === workspace.path) {
+        relays.set(workspace.id, agent.session.id);
+        return agent;
+      }
+    } catch { /* stale relay record; create a new one below */ }
+  }
+
+  const created = await createSessionIn(ctx, readConfig, workspace.path, {
+    title: `${RELAY_TITLE}: ${workspace.title}`,
+    agentPreset: undefined,
+  }, owned);
+  relays.set(workspace.id, created.handle.agent.id);
+  return created.handle.agent;
+}
+
+async function findRelaySession(ctx, workspace) {
+  let records;
+  try {
+    records = await ctx.sessionQuery.listSessions();
+  } catch {
+    return undefined;
+  }
+  const candidates = records.filter(record => record.header.cwd === workspace.path
+    && record.header.parentSession === undefined
+    && !(ctx.workspaceRegistry.archivedSessionIds ?? []).includes(record.header.id));
+  if (candidates.length === 0) return undefined;
+  const titles = await readTitles(ctx, candidates);
+  let newest;
+  for (const record of candidates) {
+    if (!isRelayTitle(titles.get(record.header.id))) continue;
+    if (newest === undefined || record.header.createdAt > newest.header.createdAt) newest = record;
+  }
+  return newest?.header.id;
 }
 
 async function forwardCommand(ctx, readConfig, owned, invocation) {

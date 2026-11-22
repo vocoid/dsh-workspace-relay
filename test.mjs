@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import {
   assistantTextIn,
   contentText,
+  formatAsk,
   formatDelivery,
   formatSessions,
+  isRelayTitle,
   lastUserText,
   parseForward,
   truncate,
@@ -46,6 +48,10 @@ assert.match(sessions, /archived/);
 
 assert.match(formatDelivery('s1', { timedOut: true }, 10), /no reply/);
 assert.match(formatDelivery('s1', { timedOut: false, reply: 'ok' }, 10), /\[s1\] ok/);
+assert.equal(isRelayTitle('Workspace relay: Demo'), true);
+assert.equal(isRelayTitle('Demo'), false);
+assert.match(formatAsk('Demo', 's9', { timedOut: false, reply: 'answer' }, 20), /answer/);
+assert.match(formatAsk('Demo', 's9', { timedOut: true }, 20), /no reply/);
 
 assert.deepEqual(parseForward('--session a,b -- hi there'), {
   ids: ['a', 'b'], workspace: undefined, title: undefined, text: 'hi there',
