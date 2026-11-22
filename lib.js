@@ -183,6 +183,14 @@ export function formatAsk(workspaceTitle, id, outcome, maxReplyChars) {
   return `[${workspaceTitle} · ${id}] ${reply}`;
 }
 
+/** Resolve a tool's wait deadline: false disables waiting; per-call timeout wins over the default. */
+export function resolveWaitMs(wait, timeoutMs, fallback, min, max) {
+  if (wait === false) return 0;
+  const requested = Number(timeoutMs === undefined || timeoutMs === null ? fallback : timeoutMs);
+  if (!Number.isFinite(requested)) return min;
+  return Math.min(max, Math.max(min, Math.trunc(requested)));
+}
+
 export function formatSpawn(result, maxReplyChars) {
   const lines = [`Created ${result.sessionId} in ${result.cwd}`];
   if (result.warning) lines.push(result.warning);

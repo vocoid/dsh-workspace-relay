@@ -9,6 +9,7 @@ import {
   isRelayTitle,
   lastUserText,
   parseForward,
+  resolveWaitMs,
   truncate,
 } from './lib.js';
 
@@ -52,6 +53,13 @@ assert.equal(isRelayTitle('Workspace relay: Demo'), true);
 assert.equal(isRelayTitle('Demo'), false);
 assert.match(formatAsk('Demo', 's9', { timedOut: false, reply: 'answer' }, 20), /answer/);
 assert.match(formatAsk('Demo', 's9', { timedOut: true }, 20), /no reply/);
+assert.equal(resolveWaitMs(false, 9000, 60000, 1000, 600000), 0);
+assert.equal(resolveWaitMs(true, 9000, 60000, 1000, 600000), 9000);
+assert.equal(resolveWaitMs(true, undefined, 60000, 1000, 600000), 60000);
+assert.equal(resolveWaitMs(true, undefined, undefined, 1000, 600000), 1000);
+assert.equal(resolveWaitMs(true, 1, 60000, 1000, 600000), 1000);
+assert.equal(resolveWaitMs(true, 999999, 60000, 1000, 600000), 600000);
+assert.equal(resolveWaitMs(true, '5000', 60000, 1000, 600000), 5000);
 
 assert.deepEqual(parseForward('--session a,b -- hi there'), {
   ids: ['a', 'b'], workspace: undefined, title: undefined, text: 'hi there',

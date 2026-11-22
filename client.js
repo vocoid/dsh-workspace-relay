@@ -19,6 +19,10 @@ window.__ModuleLoader__.load({
       readOnly: 'This profile is read-only.',
       saveFailed: 'Could not save the setting.',
       conflict: 'The configuration changed. Reopen this page and try again.',
+      waitTitle: 'Default wait time',
+      waitHint: 'Seconds to wait for a reply. Agents can override it per call with timeout_ms.',
+      save: 'Save',
+      invalidWait: 'Enter 1–600 seconds.',
       searchPlaceholder: 'Search sessions or workspaces…',
       empty: 'No other sessions or workspaces.',
       noResults: 'No matching sessions or workspaces.',
@@ -40,6 +44,10 @@ window.__ModuleLoader__.load({
       readOnly: '当前 profile 为只读。',
       saveFailed: '无法保存设置。',
       conflict: '配置已变化，请重新打开此页面后再试。',
+      waitTitle: '默认等待时间',
+      waitHint: '等待回复的秒数。agent 可以在每次调用时用 timeout_ms 覆盖。',
+      save: '保存',
+      invalidWait: '请输入 1–600 秒。',
       searchPlaceholder: '搜索会话或工作区…',
       empty: '没有其他会话或工作区。',
       noResults: '没有匹配的会话或工作区。',
@@ -177,11 +185,14 @@ window.__ModuleLoader__.load({
     function Settings({ form, t }) {
       const state = form?.state;
       const [value, setValue] = React.useState(undefined);
+      const [waitSeconds, setWaitSeconds] = React.useState(undefined);
       const [saving, setSaving] = React.useState(false);
       const [error, setError] = React.useState(undefined);
       const revision = state?.status === 'ready' ? state.revision : undefined;
       React.useEffect(() => {
-        if (state?.status === 'ready') setValue(state.value?.showSpawnedSessions === true);
+        if (state?.status !== 'ready') return;
+        setValue(state.value?.showSpawnedSessions === true);
+        setWaitSeconds(Math.round((state.value?.defaultWaitMs ?? 120_000) / 1_000));
       }, [state?.status, revision]);
 
       if (form === undefined || state?.status === 'loading') {
@@ -206,6 +217,28 @@ window.__ModuleLoader__.load({
           );
           if (!saved) throw new Error(t('conflict'));
           setValue(next);
+        } catch (caught) {
+          setError(caught instanceof Error && caught.message !== undefined ? caught.message : t('saveFailed'));
+        } finally {
+          setSaving(false);
+        }
+      }
+
+      async function saveWait() {
+        if (disabled) return;
+        const seconds = Number(waitSeconds);
+        if (!Number.isFinite(seconds) || seconds < 1 || seconds > 600) {
+          setError(t('invalidWait'));
+          return;
+        }
+        setSaving(true);
+        setError(undefined);
+        try {
+          const saved = await form.mutate(
+            [{ op: 'set', path: ['defaultWaitMs'], value: Math.round(seconds * 1_000) }],
+            state.revision,
+          );
+          if (!saved) throw new Error(t('conflict'));
         } catch (caught) {
           setError(caught instanceof Error && caught.message !== undefined ? caught.message : t('saveFailed'));
         } finally {
@@ -257,6 +290,35 @@ window.__ModuleLoader__.load({
               transition: 'left 120ms ease',
             },
           })),
+        ]),
+        h('div', {
+          key: 'wait',
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+        }, [
+          h('div', { key: 'copy', style: { display: 'grid', gap: 4 } }, [
+            h('span', { key: 'title', style: { fontWeight: 600 } }, t('waitTitle')),
+            h('small', { key: 'hint', style: { opacity: 0.7 } }, t('waitHint')),
+          ]),
+          h('div', { key: 'control', style: { display: 'flex', alignItems: 'center', gap: 8 } }, [
+            h('input', {
+              key: 'seconds',
+              type: 'number',
+              min: 1,
+              max: 600,
+              step: 1,
+              value: waitSeconds ?? '',
+              disabled,
+              'aria-label': t('waitTitle'),
+              onChange: event => setWaitSeconds(event.target.value),
+              style: { width: 80 },
+            }),
+            h('button', {
+              key: 'save',
+              type: 'button',
+              disabled,
+              onClick: saveWait,
+            }, t('save')),
+          ]),
         ]),
         error === undefined ? null : h('p', {
           key: 'error',

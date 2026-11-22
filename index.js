@@ -20,22 +20,25 @@ import {
   isRelayTitle,
   lastUserText,
   parseForward,
+  resolveWaitMs,
 } from './lib.js';
 
 export const name = 'workspace-relay';
 export const inject = ['tools', 'agents', 'workspaceRegistry', 'sessionQuery', 'commands'];
-
-const schema = z.object({
-  showSpawnedSessions: z.boolean().default(false)
-    .description('Show sessions created by workspace_spawn or /forward in their workspace list.'),
-});
-export const Config = typeof schema.volatile === 'function' ? schema.volatile() : schema;
 
 const DEFAULT_WAIT_MS = 120_000;
 const MAX_WAIT_MS = 600_000;
 const MAX_REPLY_CHARS = 8_000;
 const TOOL_TIMEOUT_MS = MAX_WAIT_MS + 30_000;
 const RELAY_TITLE = 'Workspace relay';
+
+const schema = z.object({
+  showSpawnedSessions: z.boolean().default(false)
+    .description('Show sessions created by workspace_spawn or /forward in their workspace list.'),
+  defaultWaitMs: z.number().default(DEFAULT_WAIT_MS)
+    .description('Default reply wait in milliseconds for workspace tools. Agents can override with timeout_ms.'),
+});
+export const Config = typeof schema.volatile === 'function' ? schema.volatile() : schema;
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' },
@@ -168,9 +171,13 @@ export function apply(ctx, source) {
       }
       const ids = [...new Set(args.session_ids)];
       const callerId = exec.agent?.session.id;
-      const waitMs = args.wait === false
-        ? 0
-        : clamp(args.timeout_ms ?? DEFAULT_WAIT_MS, 1_000, MAX_WAIT_MS);
+      const waitMs = resolveWaitMs(
+        args.wait,
+        args.timeout_ms,
+        readConfig().defaultWaitMs ?? DEFAULT_WAIT_MS,
+        1_000,
+        MAX_WAIT_MS,
+      );
       const outcomes = await Promise.all(ids.map(async (id) => {
         if (id === callerId) {
           return { id, error: 'refusing to send to the calling session' };
@@ -231,9 +238,13 @@ export function apply(ctx, source) {
       if (workspace === undefined) {
         throw new Error(`No workspace matches "${args.workspace}". Use workspace_list, or pass an absolute directory.`);
       }
-      const waitMs = args.wait === false
-        ? 0
-        : clamp(args.timeout_ms ?? DEFAULT_WAIT_MS, 1_000, MAX_WAIT_MS);
+      const waitMs = resolveWaitMs(
+        args.wait,
+        args.timeout_ms,
+        readConfig().defaultWaitMs ?? DEFAULT_WAIT_MS,
+        1_000,
+        MAX_WAIT_MS,
+      );
 
       let target;
       if (typeof args.session_id === 'string' && args.session_id !== '') {
@@ -302,9 +313,13 @@ export function apply(ctx, source) {
         title: args.title,
         agentPreset: args.agent_preset,
       }, owned);
-      const waitMs = args.wait === false
-        ? 0
-        : clamp(args.timeout_ms ?? DEFAULT_WAIT_MS, 1_000, MAX_WAIT_MS);
+      const waitMs = resolveWaitMs(
+        args.wait,
+        args.timeout_ms,
+        readConfig().defaultWaitMs ?? DEFAULT_WAIT_MS,
+        1_000,
+        MAX_WAIT_MS,
+      );
       const delivery = await deliver(ctx, created.handle.agent, args.message, waitMs, exec.signal);
       return formatSpawn({
         sessionId: created.handle.agent.id,
